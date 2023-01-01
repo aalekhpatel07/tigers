@@ -2,11 +2,16 @@
 name = "tigers"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.66.0"
 authors = ["Aalekh Patel <aalekh.gwpeck.7998@icloud.com"]
 license-file = "LICENSE.md"
 repository = "https://github.com/aalekhpatel07/tigers"
+homepage = "https://aalekhpatel07.github.io/tigers/"
 readme = "README.md"
+categories = ["compilers"]
+exclude = ["book-src/", "docs/", ".*"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.release]
+lto = "fat"
 
 [dependencies]
