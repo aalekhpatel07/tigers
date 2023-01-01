@@ -1,2 +1,5 @@
-pub mod lex;
-pub mod tokens;
+mod lex;
+pub use lex::*;
+
+mod tokens;
+pub use tokens::*;

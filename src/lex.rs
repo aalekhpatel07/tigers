@@ -61,13 +61,12 @@ pub struct BadInput {
 }
 
 
-pub fn lex(s: &str) -> core::result::Result<Vec<Token>, Box<dyn std::error::Error + Send + Sync>> {
+pub fn lex(s: &str) -> core::result::Result<Vec<Token>, BadInput> {
     let s_cloned = s.clone().to_owned();
     let input = Span::new(s);
     let maybe_tokens: Result<Vec<Token>, ErrorTree<Span>> = final_parser(many0(Token::parse::<ErrorTree<Span>>))(input);
-    let tokens = match maybe_tokens {
-        Ok(tokens) => tokens,
-        Err(e) => {
+        maybe_tokens
+        .map_err(|e| {
             match e {
                 GenericErrorTree::Base { location, kind } => {
                     let offset = location.location_offset().into();
@@ -81,18 +80,38 @@ pub fn lex(s: &str) -> core::result::Result<Vec<Token>, Box<dyn std::error::Erro
                     .render_report(&mut s, &err)
                     .unwrap();
                     println!("{s}");
-                    panic!("{}", s);
+                    err
                 },
                 GenericErrorTree::Stack { base, contexts } => {
-                    panic!("Stack:: {:?}{:?}", base, contexts);
+                    let err = BadInput {
+                        src: s_cloned,
+                        bad_bit: miette::SourceSpan::new(contexts.first().unwrap().0.location_offset().into(), 0.into()),
+                        kind: BaseErrorKind::External(format!("Something something GenericErrorTree::Stack {:?} {:?}", base, contexts).into()),
+                    };
+                    println!("GenericErrorTree::Stack {:?}{:?}", base, contexts);
+                    let mut s = String::new();
+                    GraphicalReportHandler::new()
+                    .render_report(&mut s, &err)
+                    .unwrap();
+                    println!("{s}");
+                    err
                 },
                 GenericErrorTree::Alt(x) => {
-                    panic!("Alt:: {:?}", x);
+                    let err = BadInput {
+                        src: s_cloned,
+                        bad_bit: miette::SourceSpan::new(0.into(), 0.into()),
+                        kind: BaseErrorKind::External(format!("Something something GenericErrorTree::Alt {:?}", x).into()),
+                    };
+                    println!("GenericErrorTree::Alt {:?}", x);
+                    let mut s = String::new();
+                    GraphicalReportHandler::new()
+                    .render_report(&mut s, &err)
+                    .unwrap();
+                    println!("{s}");
+                    err
                 }
             }
-        }
-    };
-    Ok(tokens)
+        })
 }
 
 #[cfg(test)]
@@ -145,6 +164,12 @@ mod tests {
         let result = lex(text);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), expected);
+    }
+    
+    #[test]
+    #[should_panic]
+    fn test_lex_broken_str() {
+        lex("try(c<?in t)").unwrap();
     }
 
 }

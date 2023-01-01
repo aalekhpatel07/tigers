@@ -56,7 +56,7 @@ pub use small::*;
 mod small {
     use nom::branch::alt;
     use nom::bytes::complete::{tag, take_while};
-    use nom::character::complete::{one_of, multispace1, digit1, space1, anychar};
+    use nom::character::complete::{one_of, multispace1, digit1, space1, anychar, newline};
     use nom::combinator::{map, all_consuming, opt, map_res};
     use nom::IResult;
     use nom::error::{ParseError};
@@ -263,35 +263,49 @@ mod small {
             };
 
             let tag_parser0 = tag_parser_factory();
-            let tag_parser1 = tag_parser_factory();
-            let tag_parser2 = tag_parser_factory();
-            let tag_parser3 = tag_parser_factory();
+            // let tag_parser1 = tag_parser_factory();
+            // let tag_parser2 = tag_parser_factory();
+            // let tag_parser3 = tag_parser_factory();
 
             // Currently, keywords consume the surrounding whitespace. Do we need to?
             // Idk I'll leave it for now.
+            
+            // FIXME: This is broken in the sense that keyword detection is not robust.
+            // What we really want is to have spaces on either side of the keyword,
+            // or if the keyword is at the beginning or end of the input, then we
+            // want to have a space on the side of the keyword that is not at the
+            // beginning or end of the input. I'm not too sure how to go about that
+            // but its also 6:30am so screw it.
             map(
-                alt((
-                    // Space-separated.
-                    delimited(
-                        space1,
-                        tag_parser0,
-                        space1
-                    ),
-                    delimited(
-                        tag(""),
-                        tag_parser1,
-                        space1
-                    ),
-                    delimited(
-                        space1,
-                        tag_parser2,
-                        tag("")
-                    ),
-                    
-                    all_consuming(
-                        tag_parser3
-                    )
+            alt((
+                        delimited(
+                            space1,
+                            tag_parser0,
+                            space1
+                        ),
                 )),
+                // alt((
+                //     // Space-separated.
+                //     // delimited(
+                //     //     space1,
+                //     //     tag_parser0,
+                //     //     space1
+                //     // ),
+                //     // delimited(
+                //     //     newline,
+                //     //     tag_parser1,
+                //     //     space1
+                //     // ),
+                //     // delimited(
+                //     //     space1,
+                //     //     tag_parser2,
+                //     //     newline
+                //     // ),
+                    
+                //     all_consuming(
+                //         tag_parser3
+                //     )
+                // )),
                 |v: Span<'a>| {
                     match v.as_ref() {
                         "array" => Keyword::Array,
@@ -433,7 +447,6 @@ mod small {
 pub use expr::*;
 mod expr {
     use super::*;
-    use crate::lex::Parse;
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum LValue {
