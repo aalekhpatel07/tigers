@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Aalekh Patel <aalekh.gwpeck.7998@icloud.com"]
 license-file = "LICENSE.md"
-repository = ["https://github.com/aalekhpatel07/tigers"]
+repository = "https://github.com/aalekhpatel07/tigers"
 readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
