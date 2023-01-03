@@ -2,6 +2,10 @@
 //! using the nom crate. Various constructs implement the Parse trait
 //! which is used to try parse the input into that type.
 
+use std::fmt::Display;
+
+use colored::Colorize;
+
 use miette::GraphicalReportHandler;
 use nom::combinator::map;
 use nom::multi::many0;
@@ -34,17 +38,38 @@ pub enum Token {
     Whitespace(Whitespace),
 }
 
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Token::ReservedKeyword(keyword) => write!(f, "{}", format!("{:?}", keyword).purple()),
+            Token::Identifier(identifier) => write!(f, "{}", identifier.0.bright_yellow()),
+            Token::Punctuation(punctuation) => write!(f, "{}", format!("{:?}", punctuation).red()),
+            Token::Constant(constant) => write!(f, "{}", format!("{:?}", constant).green()),
+            Token::EscapeSequence(escape_sequence) => write!(f, "{}", format!("{:?}", escape_sequence).blue()),
+            Token::Whitespace(whitespace) => write!(f, "{:?}", whitespace),
+        }
+    }
+}
 
 impl Parse for Token {
     fn parse<'a, E>(input: Span<'a>) -> IResult<Span<'a>, Self, E> where Self: Sized, E: ParseError<Span<'a>> + std::fmt::Debug {
-        alt((
-            map(Keyword::parse, Token::ReservedKeyword),
+        // Treat keywords as identifier in the first pass.
+        // If it is an identifier, we will try to convert it to a keyword explicitly.
+        let (rem, token) = alt((
             map(Identifier::parse, Token::Identifier),
             map(Punctuation::parse, Token::Punctuation),
             map(Constant::parse, Token::Constant),
             map(EscapeSequence::parse, Token::EscapeSequence),
             map(Whitespace::parse, Token::Whitespace),
-        ))(input)
+        ))(input)?;
+
+        if let Token::Identifier(identifier) = token.clone() {
+            if let Ok(keyword) = Keyword::try_from(identifier) {
+                return Ok((rem, Token::ReservedKeyword(keyword)));
+            }
+        }
+
+        Ok((rem, token))
     }
 }
 
@@ -66,6 +91,17 @@ pub fn lex(s: &str) -> core::result::Result<Vec<Token>, BadInput> {
     let input = Span::new(s);
     let maybe_tokens: Result<Vec<Token>, ErrorTree<Span>> = final_parser(many0(Token::parse::<ErrorTree<Span>>))(input);
         maybe_tokens
+        .map(|tokens| {
+            // Strip all whitespaces because they're pretty much useless outside of a string constant.
+            tokens
+            .into_iter()
+            .filter(|t| {
+                match t {
+                    Token::Whitespace(_) => false,
+                    _ => true,
+                }
+            }).collect()
+        })
         .map_err(|e| {
             match e {
                 GenericErrorTree::Base { location, kind } => {
@@ -126,15 +162,11 @@ mod tests {
             vec![
                 Token::ReservedKeyword(Keyword::Let),
                 Token::Identifier(Identifier("x".into())),
-                Token::Whitespace(Whitespace),
                 Token::Punctuation(Punctuation::Equal),
-                Token::Whitespace(Whitespace),
                 Token::Constant(Constant::String("x x. ".to_string())),
                 Token::ReservedKeyword(Keyword::In),
                 Token::Identifier(Identifier("x".into())),
-                Token::Whitespace(Whitespace),
                 Token::Punctuation(Punctuation::Plus),
-                Token::Whitespace(Whitespace),
                 Token::Constant(Constant::Integer("1".into())),
                 Token::ReservedKeyword(Keyword::End),
             ]

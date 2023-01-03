@@ -1,4 +1,5 @@
 
+use colored::Colorize;
 use nom::character::complete::one_of;
 use nom::combinator::map;
 use nom::multi::many0;
@@ -56,13 +57,14 @@ pub use small::*;
 mod small {
     use nom::branch::alt;
     use nom::bytes::complete::{tag, take_while};
-    use nom::character::complete::{one_of, multispace1, digit1, space1, anychar, newline};
+    use nom::character::complete::{one_of, multispace1, digit1, space1, anychar, newline, space0};
     use nom::combinator::{map, all_consuming, opt, map_res};
     use nom::IResult;
     use nom::error::{ParseError};
     use nom::multi::{separated_list0};
     use nom::sequence::{preceded, tuple, delimited, terminated};
     use std::fmt::Display;
+    use crate::Identifier;
     use crate::lex::{Parse, Span};
     use super::{LETTERS, DIGITS, VALID_CONTROL_CHARS};
     
@@ -236,6 +238,32 @@ mod small {
         While
     }
 
+    impl TryFrom<Identifier> for Keyword {
+        type Error = String;
+        fn try_from(value: Identifier) -> Result<Self, Self::Error> {
+            match value.0.as_str() {
+                "array" => Ok(Keyword::Array),
+                "break" => Ok(Keyword::Break),
+                "do" => Ok(Keyword::Do),
+                "else" => Ok(Keyword::Else),
+                "end" => Ok(Keyword::End),
+                "for" => Ok(Keyword::For),
+                "function" => Ok(Keyword::Function),
+                "if" => Ok(Keyword::If),
+                "in" => Ok(Keyword::In),
+                "let" => Ok(Keyword::Let),
+                "nil" => Ok(Keyword::Nil),
+                "of" => Ok(Keyword::Of),
+                "then" => Ok(Keyword::Then),
+                "to" => Ok(Keyword::To),
+                "type" => Ok(Keyword::Type),
+                "var" => Ok(Keyword::Var),
+                "while" => Ok(Keyword::While),
+                _ => Err(format!("{} is not a keyword", value.0)),
+            }
+        }
+    }
+
     impl Parse for Keyword {
         fn parse<'a, E: ParseError<Span<'a>>>(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
 
@@ -270,42 +298,15 @@ mod small {
             // Currently, keywords consume the surrounding whitespace. Do we need to?
             // Idk I'll leave it for now.
             
-            // FIXME: This is broken in the sense that keyword detection is not robust.
-            // What we really want is to have spaces on either side of the keyword,
-            // or if the keyword is at the beginning or end of the input, then we
-            // want to have a space on the side of the keyword that is not at the
-            // beginning or end of the input. I'm not too sure how to go about that
-            // but its also 6:30am so screw it.
+            // Fixed by treating keywords as identifiers in the first pass.
+            // Then, we can check if they are keywords in the second pass.
+            // This is a bit of a hack, but it works.
             map(
-            alt((
-                        delimited(
-                            space1,
-                            tag_parser0,
-                            space1
-                        ),
-                )),
-                // alt((
-                //     // Space-separated.
-                //     // delimited(
-                //     //     space1,
-                //     //     tag_parser0,
-                //     //     space1
-                //     // ),
-                //     // delimited(
-                //     //     newline,
-                //     //     tag_parser1,
-                //     //     space1
-                //     // ),
-                //     // delimited(
-                //     //     space1,
-                //     //     tag_parser2,
-                //     //     newline
-                //     // ),
-                    
-                //     all_consuming(
-                //         tag_parser3
-                //     )
-                // )),
+                delimited(
+                    space0,
+                    tag_parser0,
+                    space0
+                ),
                 |v: Span<'a>| {
                     match v.as_ref() {
                         "array" => Keyword::Array,
@@ -365,6 +366,7 @@ mod small {
                                     multispace1::<_, E>,
                                     tag("\\")
                                 )),
+                                // FIXME: What to do if it is a control character inside a string?
                                 take_while(is_not_backslash)
                             )(text);
 
@@ -625,6 +627,7 @@ mod tests {
 
     #[test_case("012345", Constant::Integer("012345".into()); "Integer is recognized")]
     #[test_case(r#""hello""#, Constant::String("hello".into()); "String is recognized.")]
+    #[test_case(r#""\n""#, Constant::String("\\n".into()); "Newline in a string is recognized.")]
     #[test_case("\"hello \\\n\t\\world\"", Constant::String("hello world".into()); "Multiline string is recognized.")]
     #[test_case("\"hello \\\n\t\\world.\\\n\t\t\t\t\n\n\n\t\\ stuff\"", Constant::String("hello world. stuff".into()); "Multiline long string is recognized.")]
     fn test_constant(text: &'static str, expected: Constant) {
