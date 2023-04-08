@@ -1,18 +1,16 @@
 
-use colored::Colorize;
 use nom::character::complete::one_of;
 use nom::combinator::map;
 use nom::multi::many0;
 use nom::sequence::tuple;
 use nom::IResult;
 use nom::error::ParseError;
-use tracing::error;
 use std::fmt::Display;
 
 
 use lazy_static::lazy_static;
 
-use crate::lex::{Parse, Span};
+use crate::lex::{Lex, Span};
 
 lazy_static! {
     static ref LETTERS: String = String::from("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ");
@@ -21,9 +19,6 @@ lazy_static! {
     static ref LETTERS_OR_DIGITS_OR_UNDERSCORE: String = String::from("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_");
     static ref VALID_CONTROL_CHARS: String = String::from(r#"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_"#);
 }
-
-
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Identifier(pub(crate) String);
@@ -36,12 +31,11 @@ impl Display for Identifier {
     }
 }
 
-impl Parse for Identifier {
-
-    fn parse<'a, E: ParseError<Span<'a>> + std::fmt::Debug >(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
+impl Lex for Identifier {
+    fn lex<'a, E: ParseError<Span<'a>> + std::fmt::Debug >(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
         map(
             tuple((
-                Letter::parse::<E>,
+                Letter::lex::<E>,
                 many0(
                     one_of(LETTERS_OR_DIGITS_OR_UNDERSCORE.as_str())
                 ),
@@ -57,23 +51,23 @@ pub use small::*;
 mod small {
     use nom::branch::alt;
     use nom::bytes::complete::{tag, take_while};
-    use nom::character::complete::{one_of, multispace1, digit1, space1, anychar, newline, space0};
-    use nom::combinator::{map, all_consuming, opt, map_res};
+    use nom::character::complete::{one_of, multispace1, digit1, space0};
+    use nom::combinator::map;
     use nom::IResult;
-    use nom::error::{ParseError};
-    use nom::multi::{separated_list0};
-    use nom::sequence::{preceded, tuple, delimited, terminated};
+    use nom::error::ParseError;
+    use nom::multi::separated_list0;
+    use nom::sequence::{preceded, tuple, delimited};
     use std::fmt::Display;
     use crate::Identifier;
-    use crate::lex::{Parse, Span};
+    use crate::lex::{Lex, Span};
     use super::{LETTERS, DIGITS, VALID_CONTROL_CHARS};
     
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct Letter(char);
 
-    impl Parse for Letter {
-        fn parse<'a, E: ParseError<Span<'a>>>(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
+    impl Lex for Letter {
+        fn lex<'a, E: ParseError<Span<'a>>>(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
             map(
                 one_of(LETTERS.as_str()),
                 |c| Letter(c),
@@ -84,8 +78,8 @@ mod small {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct Digit(pub(crate) char);
 
-    impl Parse for Digit {
-        fn parse<'a, E: ParseError<Span<'a>>>(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
+    impl Lex for Digit {
+        fn lex<'a, E: ParseError<Span<'a>>>(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
             map(
                 one_of(DIGITS.as_str()),
                 |c| Digit(c),
@@ -102,8 +96,8 @@ mod small {
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct Whitespace;
 
-    impl Parse for Whitespace {
-        fn parse<'a, E>(input: Span<'a>) -> IResult<Span<'a>, Self, E> where E: ParseError<Span<'a>> + std::fmt::Debug {
+    impl Lex for Whitespace {
+        fn lex<'a, E>(input: Span<'a>) -> IResult<Span<'a>, Self, E> where E: ParseError<Span<'a>> + std::fmt::Debug {
             map(
                 multispace1,
                 |_| Whitespace,
@@ -147,8 +141,8 @@ mod small {
         c != '\\'
     }
 
-    impl Parse for Punctuation {
-        fn parse<'a, E>(input: Span<'a>) -> IResult<Span<'a>, Self, E> 
+    impl Lex for Punctuation {
+        fn lex<'a, E>(input: Span<'a>) -> IResult<Span<'a>, Self, E> 
             where E: ParseError<Span<'a>>
         {
             map(
@@ -264,8 +258,8 @@ mod small {
         }
     }
 
-    impl Parse for Keyword {
-        fn parse<'a, E: ParseError<Span<'a>>>(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
+    impl Lex for Keyword {
+        fn lex<'a, E: ParseError<Span<'a>>>(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
 
 
             let tag_parser_factory = || {
@@ -341,8 +335,8 @@ mod small {
         String(String)
     }
 
-    impl Parse for Constant {
-        fn parse<'a, E: ParseError<Span<'a>> + std::fmt::Debug>(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
+    impl Lex for Constant {
+        fn lex<'a, E: ParseError<Span<'a>> + std::fmt::Debug>(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
             alt((
                 map(
                     digit1,
@@ -366,8 +360,7 @@ mod small {
                                     multispace1::<_, E>,
                                     tag("\\")
                                 )),
-                                // FIXME: What to do if it is a control character inside a string?
-                                take_while(is_not_backslash)
+                                take_while(|_| true)
                             )(text);
 
                         strings.map(|(_, individual_parts)| {
@@ -396,8 +389,8 @@ mod small {
         ASCIICode([Digit; 3]),
     }
 
-    impl Parse for EscapeSequence {
-        fn parse<'a, E: ParseError<Span<'a>> + std::fmt::Debug>(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
+    impl Lex for EscapeSequence {
+        fn lex<'a, E: ParseError<Span<'a>> + std::fmt::Debug>(input: Span<'a>) -> IResult<Span<'a>, Self, E> {
             preceded(
             tag(r#"\"#),
             alt((
@@ -431,9 +424,9 @@ mod small {
                             preceded(
                                 tag("x"),
                                 tuple((
-                                    Digit::parse::<E>,
-                                    Digit::parse::<E>,
-                                    Digit::parse::<E>,
+                                    Digit::lex::<E>,
+                                    Digit::lex::<E>,
+                                    Digit::lex::<E>,
                                 )),
                             ),
                             |(d1, d2, d3)| EscapeSequence::ASCIICode([d1, d2, d3]),
@@ -444,99 +437,6 @@ mod small {
     }
 
 }
-
-// TODO: Implement the parsing for expressions.
-pub use expr::*;
-mod expr {
-    use super::*;
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum LValue {
-        Identifier(Identifier),
-        ArrayAccess(Box<LValue>, Box<Expression>),
-        RecordAccess(Box<LValue>, Identifier),
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum Expression {
-        /// String constant or Integer constant.
-        Constant(Constant),
-        /// A None value that can be inserted in any Record or Array that expects a concrete typed value.
-        Nil,
-        LValue(Box<LValue>),
-        Negation(Box<Expression>),
-        BinaryOperation(Box<Expression>, BinaryOperator, Box<Expression>),
-        Assignment(Box<LValue>, Box<Expression>),
-        FunctionCall(Identifier, Vec<Expression>),
-        Sequence(Vec<Expression>),
-        TypeDefinition(TypeId, Vec<Expression>),
-        ArrayOfTypeDefinition(TypeId, Box<Expression>),
-        IfThen(Box<Expression>, Box<Expression>),
-        IfThenElse(Box<Expression>, Box<Expression>, Box<Expression>),
-        WhileDo(Box<Expression>, Box<Expression>),
-        ForToDo(Identifier, Box<Expression>, Box<Expression>, Box<Expression>),
-        Break(Keyword),
-        LetInEnd(Vec<Declaration>, Vec<Expression>),
-    }
-
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum Type {
-        TypeId(TypeId),
-        /// { type-fields opt }
-        TypeFields(Vec<(Identifier, TypeId)>),
-        /// array of `type-id`
-        ArrayOfType(TypeId),
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum TypeDeclaration {
-        // type `type-id` = `type`
-        Type(TypeId, Type),
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum VariableDeclaration {
-        // var `identifier` : `type-id` = `expression`
-        VariableTyped(Identifier, TypeId, Expression),
-        // var `identifier` = `expression`
-        VariableUnTyped(Identifier, Expression),
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum FunctionDeclaration {
-        /// function `id` ( type-fields opt) = `expr`
-        Procedure(Identifier, Type, Expression),
-        /// function `id` ( type-fields opt) : `type-id` = `expr`
-        Function(Identifier, Type, TypeId, Expression)
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum Declaration {
-        TypeDeclaration(TypeDeclaration),
-        VariableDeclaration(VariableDeclaration),
-        FunctionDeclaration(FunctionDeclaration),
-    }
-
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum BinaryOperator {
-        Plus,
-        Minus,
-        Times,
-        Divide,
-        Equals,
-        NotEquals,
-        LessThan,
-        LessThanOrEqual,
-        GreaterThan,
-        GreaterThanOrEqual,
-        And,
-        Or,
-    }
-
-}
-
 
 #[cfg(test)]
 mod tests {
@@ -550,7 +450,7 @@ mod tests {
     #[test_case("hello123_123", "hello123_123"; "Identifier with numbers and underscore is recognized")]
     fn test_identifier(text: &'static str, identifier: &'static str) {
         let input = Span::new(text);
-        let result = Identifier::parse::<ErrorTree<Span<'static>>>(input);
+        let result = Identifier::lex::<ErrorTree<Span<'static>>>(input);
         assert_eq!(result.unwrap().1, Identifier(String::from(identifier)));
     }
 
@@ -582,7 +482,7 @@ mod tests {
     #[test_case("*/", Punctuation::CommentEnd ; "CommentEnd is recognized")]
     fn test_punctuation(text: &'static str, expected: Punctuation) {
         let input = Span::new(text);
-        let result = Punctuation::parse::<ErrorTree<Span<'static>>>(input);
+        let result = Punctuation::lex::<ErrorTree<Span<'static>>>(input);
         assert_eq!(result.unwrap().1, expected);
     }
 
@@ -598,7 +498,7 @@ mod tests {
     #[test_case(r#"\^_"#, EscapeSequence::Control('_') ; "Control underscore is recognized")]
     fn test_escape_sequence(text: &'static str, expected: EscapeSequence) {
         let input = Span::new(text);
-        let result = EscapeSequence::parse::<ErrorTree<Span<'static>>>(input);
+        let result = EscapeSequence::lex::<ErrorTree<Span<'static>>>(input);
         assert_eq!(result.unwrap().1, expected);
     }
 
@@ -621,18 +521,18 @@ mod tests {
     #[test_case("while", Keyword::While ; "While is recognized")]
     fn test_keyword(text: &'static str, expected: Keyword) {
         let input = Span::new(text);
-        let result = Keyword::parse::<ErrorTree<Span<'static>>>(input);
+        let result = Keyword::lex::<ErrorTree<Span<'static>>>(input);
         assert_eq!(result.unwrap().1, expected);
     }
 
     #[test_case("012345", Constant::Integer("012345".into()); "Integer is recognized")]
     #[test_case(r#""hello""#, Constant::String("hello".into()); "String is recognized.")]
     #[test_case(r#""\n""#, Constant::String("\\n".into()); "Newline in a string is recognized.")]
-    #[test_case("\"hello \\\n\t\\world\"", Constant::String("hello world".into()); "Multiline string is recognized.")]
-    #[test_case("\"hello \\\n\t\\world.\\\n\t\t\t\t\n\n\n\t\\ stuff\"", Constant::String("hello world. stuff".into()); "Multiline long string is recognized.")]
+    #[test_case("\"hello \\\n\t\\world\"", Constant::String("hello \\\n\t\\world".into()); "Multiline string is recognized.")]
+    #[test_case("\"hello \\\n\t\\world.\\\n\t\t\t\t\n\n\n\t\\ stuff\"", Constant::String("hello \\\n\t\\world.\\\n\t\t\t\t\n\n\n\t\\ stuff".into()); "Multiline long string is recognized.")]
     fn test_constant(text: &'static str, expected: Constant) {
         let input = Span::new(text);
-        let result = Constant::parse::<ErrorTree<Span<'static>>>(input);
+        let result = Constant::lex::<ErrorTree<Span<'static>>>(input);
         assert_eq!(result.unwrap().1, expected);
     }
 

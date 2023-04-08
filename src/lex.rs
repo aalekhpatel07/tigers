@@ -24,8 +24,8 @@ use crate::tokens::{
 
 pub type Span<'a> = LocatedSpan<&'a str>;
 
-pub trait Parse {
-    fn parse<'a, E>(input: Span<'a>) -> IResult<Span<'a>, Self, E> where Self: Sized, E: ParseError<Span<'a>> + std::fmt::Debug;
+pub trait Lex {
+    fn lex<'a, E>(input: Span<'a>) -> IResult<Span<'a>, Self, E> where Self: Sized, E: ParseError<Span<'a>> + std::fmt::Debug;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,16 +51,16 @@ impl Display for Token {
     }
 }
 
-impl Parse for Token {
-    fn parse<'a, E>(input: Span<'a>) -> IResult<Span<'a>, Self, E> where Self: Sized, E: ParseError<Span<'a>> + std::fmt::Debug {
+impl Lex for Token {
+    fn lex<'a, E>(input: Span<'a>) -> IResult<Span<'a>, Self, E> where Self: Sized, E: ParseError<Span<'a>> + std::fmt::Debug {
         // Treat keywords as identifier in the first pass.
         // If it is an identifier, we will try to convert it to a keyword explicitly.
         let (rem, token) = alt((
-            map(Identifier::parse, Token::Identifier),
-            map(Punctuation::parse, Token::Punctuation),
-            map(Constant::parse, Token::Constant),
-            map(EscapeSequence::parse, Token::EscapeSequence),
-            map(Whitespace::parse, Token::Whitespace),
+            map(Identifier::lex, Token::Identifier),
+            map(Punctuation::lex, Token::Punctuation),
+            map(Constant::lex, Token::Constant),
+            map(EscapeSequence::lex, Token::EscapeSequence),
+            map(Whitespace::lex, Token::Whitespace),
         ))(input)?;
 
         if let Token::Identifier(identifier) = token.clone() {
@@ -89,7 +89,7 @@ pub struct BadInput {
 pub fn lex(s: &str) -> core::result::Result<Vec<Token>, BadInput> {
     let s_cloned = s.clone().to_owned();
     let input = Span::new(s);
-    let maybe_tokens: Result<Vec<Token>, ErrorTree<Span>> = final_parser(many0(Token::parse::<ErrorTree<Span>>))(input);
+    let maybe_tokens: Result<Vec<Token>, ErrorTree<Span>> = final_parser(many0(Token::lex::<ErrorTree<Span>>))(input);
         maybe_tokens
         .map(|tokens| {
             // Strip all whitespaces because they're pretty much useless outside of a string constant.
