@@ -1,10 +1,213 @@
 use std::str::FromStr;
+use crate::ast::{Expr, BinOpCode, LValue, Keyword, Type, VariableDecl, Declaration, FunctionDecl, TypeDecl};
+use lalrpop_util::ErrorRecovery;
 
-grammar;
 
-pub Term: i32 = {
-    <n:Num> => n,
-    "(" <t:Term> ")" => t,
+grammar<'err>(
+    errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, &'static str>>
+);
+
+
+Tier<Op,NextTier>: Box<Expr> = {
+    Tier<Op,NextTier> Op NextTier => Box::new(Expr::BinOp(<>)),
+    NextTier
 };
 
-Num: i32 = <s:r"[0-9]+"> => i32::from_str(s).unwrap();
+
+Many<T, Sep>: Vec<T> = {
+    <mut v:(<T> Sep)*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+
+Comma<T> = Many<T, r",">;
+Semicolon<T> = Many<T, r";">;
+
+
+OrOp: BinOpCode = {
+    "|" => BinOpCode::Or
+}
+
+AndOp: BinOpCode = {
+    "&" => BinOpCode::And
+}
+
+ComparisonOp: BinOpCode = {
+    "<" => BinOpCode::LessThan,
+    ">" => BinOpCode::GreaterThan,
+    "<=" => BinOpCode::LessThanEqual,
+    ">=" => BinOpCode::GreaterThanEqual,
+    "<>" => BinOpCode::LessThanGreaterThan,
+    "=" => BinOpCode::Equal,
+}
+
+SumOp: BinOpCode = {
+    "+" => BinOpCode::Add,
+    "-" => BinOpCode::Sub,
+};
+
+FactorOp: BinOpCode = {
+    "*" => BinOpCode::Mul,
+    "/" => BinOpCode::Div,
+};
+
+pub LValue: Box<LValue> = {
+    Identifier => Box::new(LValue::Id(<>.to_string())),
+    <left:LValue> "." <id:Identifier> => Box::new(LValue::FieldAccess(left, Box::new(LValue::Id(id)))),
+    <left:LValue> "[" <e:Expr> "]" => Box::new(LValue::ArrayAccess(left, e)),
+};
+
+pub BinOr = Tier<OrOp, BinAnd>;
+pub BinAnd = Tier<AndOp, Comparison>;
+pub Comparison = Tier<ComparisonOp, Sum>;
+pub Sum = Tier<SumOp, Factor>;
+pub Factor = Tier<FactorOp, Expr>;
+
+pub Keyword: Box<Keyword> = {
+    "array" => Box::new(Keyword::Array),
+    "break" => Box::new(Keyword::Break),
+    "do" => Box::new(Keyword::Do),
+    "else" => Box::new(Keyword::Else),
+    "end" => Box::new(Keyword::End),
+    "for" => Box::new(Keyword::For),
+    "function" => Box::new(Keyword::Function),
+    "if" => Box::new(Keyword::If),
+    "in" => Box::new(Keyword::In),
+    "let" => Box::new(Keyword::Let),
+    "nil" => Box::new(Keyword::Nil),
+    "of" => Box::new(Keyword::Of),
+    "then" => Box::new(Keyword::Then),
+    "to" => Box::new(Keyword::To),
+    "type" => Box::new(Keyword::Type),
+    "var" => Box::new(Keyword::Var),
+    "while" => Box::new(Keyword::While),
+};
+
+pub Type: Box<Type> = {
+    Identifier => Box::new(Type::Id(<>.to_string())),
+    "array" "of" <Identifier> => Box::new(Type::ArrayOf(Box::new(Type::Id(<>.to_string())))),
+    "{" <TypeFields> "}" => Box::new(Type::Field(Box::new(<>.into_iter().collect())))
+}
+
+pub TypeField: (String, String) = {
+    <l:Identifier> ":" <r:Identifier> => (l, r),
+}
+
+pub TypeFields = Comma<TypeField>;
+pub Declarations: Vec<Declaration> = {
+    <d:Declaration> => vec![*d],
+    <ds:Declarations> <d:Declaration> => {
+        let mut arr = ds.into_iter().collect::<Vec<_>>();
+        arr.push(*d);
+        arr
+    }
+}
+
+
+pub FunctionDecl: Box<FunctionDecl> = {
+    "function" <id:Identifier> "(" <fields:TypeFields> ")" "=" <e:Expr> => {
+        Box::new(
+            FunctionDecl { 
+                name: id, 
+                arguments: Box::new(fields.into_iter().collect()),
+                return_type: None,
+                body: e
+            }
+        )
+    },
+    "function" <id:Identifier> "(" <fields:TypeFields> ")" ":" <type_id:Identifier> "=" <e:Expr> => {
+        Box::new(
+            FunctionDecl { 
+                name: id, 
+                arguments: Box::new(fields.into_iter().collect()),
+                return_type: Some(type_id),
+                body: e
+            }
+        )
+    },
+}
+
+pub VariableDecl: Box<VariableDecl> = {
+    "var" <id:Identifier> ":=" <e:Expr> => {
+        Box::new(
+            VariableDecl {
+                name: id,
+                r#type: None,
+                body: e
+            }
+        )
+    },
+    "var" <id:Identifier> ":" <type_id:Identifier> ":=" <e:Expr> => {
+        Box::new(
+            VariableDecl {
+                name: id,
+                r#type: Some(type_id),
+                body: e
+            }
+        )
+    }
+}
+
+pub TypeDecl: Box<TypeDecl> = {
+    "type" <type_id:Identifier> "=" <type_:Type> => {
+        Box::new(
+            TypeDecl {
+                name: type_id,
+                r#type: type_
+            }
+        )
+    }
+}
+
+pub Declaration: Box<Declaration> = {
+    VariableDecl => Box::new(Declaration::Variable(<>)),
+    FunctionDecl => Box::new(Declaration::Function(<>)),
+    TypeDecl => Box::new(Declaration::Type(<>))
+}
+
+pub Expr: Box<Expr> = {
+    DoubleQuoted => Box::new(Expr::ConstantString(<>)),
+    Num => Box::new(Expr::ConstantInteger(<>.to_string())),
+    "nil" => Box::new(Expr::Nil),
+    Dash <v:Expr> => Box::new(Expr::Neg(v)),
+    LParen <Expr> RParen,
+    <l:LValue> ":=" <e:Expr> => Box::new(Expr::Assign(l, e)),
+    <l:LValue> => Box::new(Expr::LValue(Box::new(*l))),
+    
+    ! => { errors.push(<>); Box::new(Expr::Error)},
+
+    // Factor => Box::new(Expr::BinOp(<>))
+}
+
+
+pub ExprList = Comma<Expr>;
+pub ExprSeq = Semicolon<Expr>;
+
+
+
+Dash: String = {
+    "-" => <>.to_string()
+}
+LParen: String = {
+    "(" => <>.to_string()
+}
+RParen: String = {
+    ")" => <>.to_string()
+}
+
+Identifier: String = {
+    r#"[a-zA-Z]\w*"# => <>.to_string()
+}
+
+Num: String = {
+    r#"[0-9]+"# => <>.to_string()
+}
+
+DoubleQuoted: String = {
+    r#""[^"]*""# => <>.to_string()[1..<>.to_string().len() - 1].to_string()
+}

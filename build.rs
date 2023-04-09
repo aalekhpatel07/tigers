@@ -1,5 +1,3 @@
-use std::{path, str::FromStr};
-
 use lalrpop;
 
 fn main() {
