@@ -1,5 +1,4 @@
-mod lex;
-pub use lex::*;
+use lalrpop_util::lalrpop_mod;
+lalrpop_mod!(pub tiger);
 
-mod tokens;
-pub use tokens::*;
+pub mod ast;

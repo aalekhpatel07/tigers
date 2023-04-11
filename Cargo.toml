@@ -2,32 +2,22 @@
 name = "tigers"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.66.0"
 authors = ["Aalekh Patel <aalekh.gwpeck.7998@icloud.com"]
-license-file = "LICENSE.md"
-repository = "https://github.com/aalekhpatel07/tigers"
-homepage = "https://aalekhpatel07.github.io/tigers/"
-readme = "README.md"
-categories = ["compilers"]
-exclude = ["book-src/", "docs/", ".*"]
+
+build = "build.rs"
 
 [profile.release]
 lto = "fat"
 
-[dependencies]
-clap = { version = "4.0.32", features = ["derive"] }
-colored = "2.0.0"
-lazy_static = "1.4.0"
 
-# For parsing and lexing.
-miette = { version = "5", features = ["fancy"] }
-nom = "7"
-nom-supreme = "0.8"
-nom_locate = "4"
-rustyline = "10.0.0"
-rustyline-derive = "0.7.0"
-thiserror = "1.0.38"
-tracing = "0.1.37"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lalrpop-util = { version = "0.19.9", features = ["lexer"] }
+regex = "1"
+
+[build-dependencies]
+lalrpop = "0.19.9"
 
 [dev-dependencies]
-test-case = "2.2.2"
+test-case = "3.1.0"
